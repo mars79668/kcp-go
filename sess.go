@@ -763,6 +763,10 @@ func (s *UDPSession) kcpInput(data []byte) {
 
 }
 
+func (s *UDPSession) SetBlock(block BlockCrypt) {
+	s.block = block
+}
+
 type (
 	// Listener defines a server which will be waiting to accept incoming connections
 	Listener struct {
