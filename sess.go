@@ -653,6 +653,7 @@ func (s *UDPSession) notifyWriteError(err error) {
 func (s *UDPSession) packetInput(data []byte) {
 	decrypted := false
 	if s.block != nil && len(data) >= cryptHeaderSize {
+
 		s.block.Decrypt(data, data)
 		data = data[nonceSize:]
 		checksum := crc32.ChecksumIEEE(data[crcSize:])
@@ -792,14 +793,29 @@ type (
 func (l *Listener) packetInput(data []byte, addr net.Addr) {
 	decrypted := false
 	if l.block != nil && len(data) >= cryptHeaderSize {
-		l.block.Decrypt(data, data)
-		data = data[nonceSize:]
-		checksum := crc32.ChecksumIEEE(data[crcSize:])
-		if checksum == binary.LittleEndian.Uint32(data) {
-			data = data[crcSize:]
-			decrypted = true
+		l.sessionLock.Lock()
+		s, ok := l.sessions[addr.String()]
+		l.sessionLock.Unlock()
+		if ok {
+			s.block.Decrypt(data, data)
+			data = data[nonceSize:]
+			checksum := crc32.ChecksumIEEE(data[crcSize:])
+			if checksum == binary.LittleEndian.Uint32(data) {
+				data = data[crcSize:]
+				decrypted = true
+			} else {
+				atomic.AddUint64(&DefaultSnmp.InCsumErrors, 1)
+			}
 		} else {
-			atomic.AddUint64(&DefaultSnmp.InCsumErrors, 1)
+			l.block.Decrypt(data, data)
+			data = data[nonceSize:]
+			checksum := crc32.ChecksumIEEE(data[crcSize:])
+			if checksum == binary.LittleEndian.Uint32(data) {
+				data = data[crcSize:]
+				decrypted = true
+			} else {
+				atomic.AddUint64(&DefaultSnmp.InCsumErrors, 1)
+			}
 		}
 	} else if l.block == nil {
 		decrypted = true
